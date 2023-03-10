@@ -9,6 +9,8 @@ from __future__ import print_function
 
 import _init_paths
 import os
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
+
 import sys
 import numpy as np
 import argparse
@@ -21,17 +23,19 @@ from torch.autograd import Variable
 import torch.nn as nn
 import torch.optim as optim
 
-import torchvision.transforms as transforms
+import torchvision.transforms as T
 from torch.utils.data.sampler import Sampler
-
+sys.path.append('/home/local/KHQ/alexander.lynch/faster-rcnn.pytorch')
 from roi_data_layer.roidb import combined_roidb
-from roi_data_layer.roibatchLoader import roibatchLoader
-from model.utils.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
-from model.utils.net_utils import weights_normal_init, save_net, load_net, \
+#from roi_data_layer.roibatchLoader import roibatchLoader
+from lib.model.utils.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
+from lib.model.utils.net_utils import weights_normal_init, save_net, load_net, \
       adjust_learning_rate, save_checkpoint, clip_gradient
 
-from model.faster_rcnn.vgg16 import vgg16
-from model.faster_rcnn.resnet import resnet
+#from lib.model.faster_rcnn.vgg16 import vgg16
+from lib.model.faster_rcnn.resnet import resnet
+sys.path.append('/home/alex/Projects/PTG/faster-rcnn_fine_tuning/')
+from bbn_data import BBN_Data
 
 def parse_args():
   """
@@ -40,10 +44,10 @@ def parse_args():
   parser = argparse.ArgumentParser(description='Train a Fast R-CNN network')
   parser.add_argument('--dataset', dest='dataset',
                       help='training dataset',
-                      default='pascal_voc', type=str)
+                      default='vg', type=str)
   parser.add_argument('--net', dest='net',
                     help='vgg16, res101',
-                    default='vgg16', type=str)
+                    default='res101', type=str)
   parser.add_argument('--start_epoch', dest='start_epoch',
                       help='starting epoch',
                       default=1, type=int)
@@ -58,11 +62,11 @@ def parse_args():
                       default=10000, type=int)
 
   parser.add_argument('--save_dir', dest='save_dir',
-                      help='directory to save models', default="models",
+                      help='directory to save models', default="/home/alex/Projects/PTG/model_output/bbn_tourniquet/",
                       type=str)
   parser.add_argument('--nw', dest='num_workers',
                       help='number of workers to load data',
-                      default=0, type=int)
+                      default=1, type=int)
   parser.add_argument('--cuda', dest='cuda',
                       help='whether use CUDA',
                       action='store_true')
@@ -76,7 +80,7 @@ def parse_args():
                       help='batch_size',
                       default=1, type=int)
   parser.add_argument('--cag', dest='class_agnostic',
-                      help='whether to perform class_agnostic bbox regression',
+                      help='whether perform class_agnostic bbox regression',
                       action='store_true')
 
 # config optimization
@@ -110,7 +114,7 @@ def parse_args():
                       default=1, type=int)
   parser.add_argument('--checkpoint', dest='checkpoint',
                       help='checkpoint to load model',
-                      default=0, type=int)
+                      default="/home/alex/Projects/PTG/angel_system/angel_system/fasterrcnn/pretrained_models/faster_rcnn_res101_vg.pth", type=str)
 # log and display
   parser.add_argument('--use_tfb', dest='use_tfboard',
                       help='whether use tensorboard',
@@ -133,7 +137,7 @@ class sampler(Sampler):
 
   def __iter__(self):
     rand_num = torch.randperm(self.num_per_batch).view(-1,1) * self.batch_size
-    self.rand_num = rand_num.expand(self.num_per_batch, self.batch_size) + self.range
+    self.rand_num = rand_num.expand(self.num_per_batch, self.batch_siLEARNING_RATEze) + self.range
 
     self.rand_num_view = self.rand_num.view(-1)
 
@@ -176,7 +180,6 @@ if __name__ == '__main__':
       args.set_cfgs = ['ANCHOR_SCALES', '[4, 8, 16, 32]', 'ANCHOR_RATIOS', '[0.5,1,2]', 'MAX_NUM_GT_BOXES', '50']
 
   args.cfg_file = "cfgs/{}_ls.yml".format(args.net) if args.large_scale else "cfgs/{}.yml".format(args.net)
-
   if args.cfg_file is not None:
     cfg_from_file(args.cfg_file)
   if args.set_cfgs is not None:
@@ -194,23 +197,30 @@ if __name__ == '__main__':
   # -- Note: Use validation set and disable the flipped to enable faster loading.
   cfg.TRAIN.USE_FLIPPED = True
   cfg.USE_GPU_NMS = args.cuda
-  imdb, roidb, ratio_list, ratio_index = combined_roidb(args.imdb_name)
-  train_size = len(roidb)
+  #imdb, roidb, ratio_list, ratio_index = combined_roidb(args.imdb_name)
+  #train_size = len(roidb)
 
-  print('{:d} roidb entries'.format(len(roidb)))
+  #print('{:d} roidb entries'.format(len(roidb)))
 
   output_dir = args.save_dir + "/" + args.net + "/" + args.dataset
   if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
-  sampler_batch = sampler(train_size, args.batch_size)
-
-  dataset = roibatchLoader(roidb, ratio_list, ratio_index, args.batch_size, \
-                           imdb.num_classes, training=True)
-
+  #sampler_batch = sampler(train_size, args.batch_size)
+  #dataset = roibatchLoader(roidb, ratio_list, ratio_index, args.batch_size, \
+  #                         imdb.num_classes, training=True)
+  dataset = BBN_Data(files_dir='/home/alex/Projects/PTG/bbn/data/M2_Tourniquet/YoloModel/LabeledObjects/train',
+                classes_file='/home/alex/Projects/PTG/bbn/data/M2_Tourniquet/YoloModel/object_names.txt')
+  val_dataset = BBN_Data(files_dir='/home/alex/Projects/PTG/bbn/data/M2_Tourniquet/YoloModel/LabeledObjects/test',
+                classes_file='/home/alex/Projects/PTG/bbn/data/M2_Tourniquet/YoloModel/object_names.txt')
+  #dataset, dataset_test = torch.utils.data.random_split(dataset,[1262, 200])
+  train_size = len(dataset)
+  val_size = len(val_dataset)
+  
   dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size,
-                            sampler=sampler_batch, num_workers=args.num_workers)
-
+                            num_workers=args.num_workers)
+  val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size,
+                            num_workers=args.num_workers)
   # initilize the tensor holder here.
   im_data = torch.FloatTensor(1)
   im_info = torch.FloatTensor(1)
@@ -237,7 +247,7 @@ if __name__ == '__main__':
   if args.net == 'vgg16':
     fasterRCNN = vgg16(imdb.classes, pretrained=True, class_agnostic=args.class_agnostic)
   elif args.net == 'res101':
-    fasterRCNN = resnet(imdb.classes, 101, pretrained=True, class_agnostic=args.class_agnostic)
+    fasterRCNN = resnet(dataset.classes, pretrained=True, class_agnostic=args.class_agnostic)
   elif args.net == 'res50':
     fasterRCNN = resnet(imdb.classes, 50, pretrained=True, class_agnostic=args.class_agnostic)
   elif args.net == 'res152':
@@ -262,6 +272,9 @@ if __name__ == '__main__':
       else:
         params += [{'params':[value],'lr':lr, 'weight_decay': cfg.TRAIN.WEIGHT_DECAY}]
 
+  if args.cuda:
+    fasterRCNN.cuda()
+      
   if args.optimizer == "adam":
     lr = lr * 0.1
     optimizer = torch.optim.Adam(params)
@@ -269,28 +282,26 @@ if __name__ == '__main__':
   elif args.optimizer == "sgd":
     optimizer = torch.optim.SGD(params, momentum=cfg.TRAIN.MOMENTUM)
 
-  if args.cuda:
-    fasterRCNN.cuda()
-
   if args.resume:
-    load_name = os.path.join(output_dir,
-      'faster_rcnn_{}_{}_{}.pth'.format(args.checksession, args.checkepoch, args.checkpoint))
-    print("loading checkpoint %s" % (load_name))
-    checkpoint = torch.load(load_name)
+    #load_name = os.path.join(output_dir,
+    #  'faster_rcnn_{}_{}_{}.pth'.format(args.checksession, args.checkepoch, args.checkpoint))
+    print("loading checkpoint %s" % (args.checkpoint))
+    checkpoint = torch.load(args.checkpoint)
     args.session = checkpoint['session']
     args.start_epoch = checkpoint['epoch']
     fasterRCNN.load_state_dict(checkpoint['model'])
     optimizer.load_state_dict(checkpoint['optimizer'])
     lr = optimizer.param_groups[0]['lr']
+
     if 'pooling_mode' in checkpoint.keys():
       cfg.POOLING_MODE = checkpoint['pooling_mode']
     print("loaded checkpoint %s" % (load_name))
 
   if args.mGPUs:
     fasterRCNN = nn.DataParallel(fasterRCNN)
-
   iters_per_epoch = int(train_size / args.batch_size)
-
+  #iters_per_epoch = 500
+  val_iters = int(val_size / args.batch_size)
   if args.use_tfboard:
     from tensorboardX import SummaryWriter
     logger = SummaryWriter("logs")
@@ -304,15 +315,24 @@ if __name__ == '__main__':
     if epoch % (args.lr_decay_step + 1) == 0:
         adjust_learning_rate(optimizer, args.lr_decay_gamma)
         lr *= args.lr_decay_gamma
-
-    data_iter = iter(dataloader)
+    data_iter = iter(dataloader)  # -- Note: Use validation set and disable the flipped to enable faster loading.
+    val_data_iter = iter(val_dataloader)
+    count = 0
     for step in range(iters_per_epoch):
       data = next(data_iter)
-      im_data.data.resize_(data[0].size()).copy_(data[0])
-      im_info.data.resize_(data[1].size()).copy_(data[1])
-      gt_boxes.data.resize_(data[2].size()).copy_(data[2])
-      num_boxes.data.resize_(data[3].size()).copy_(data[3])
-
+      count += 1
+      with torch.no_grad():
+              im_data = torch.unsqueeze(data[0][0], 0).cuda()
+              im_info = data[1][0].cuda()
+              gt_boxes = torch.unsqueeze(data[2][0], 0).cuda()
+              num_boxes = data[3][0].cuda()
+              '''
+              im_data.resize_(data[0].size()).copy_(data[0])
+              im_info.resize_(data[1].size()).copy_(data[1])
+              gt_boxes.resize_(data[2].size()).copy_(data[2])
+              num_boxes.resize_(data[3].size()).copy_(data[3])
+              '''
+  
       fasterRCNN.zero_grad()
       rois, cls_prob, bbox_pred, \
       rpn_loss_cls, rpn_loss_box, \
@@ -322,7 +342,8 @@ if __name__ == '__main__':
       loss = rpn_loss_cls.mean() + rpn_loss_box.mean() \
            + RCNN_loss_cls.mean() + RCNN_loss_bbox.mean()
       loss_temp += loss.item()
-
+      if loss_temp == "nan":
+        pdb.set_trace()
       # backward
       optimizer.zero_grad()
       loss.backward()
@@ -349,8 +370,66 @@ if __name__ == '__main__':
           loss_rcnn_box = RCNN_loss_bbox.item()
           fg_cnt = torch.sum(rois_label.data.ne(0))
           bg_cnt = rois_label.data.numel() - fg_cnt
-
         print("[session %d][epoch %2d][iter %4d/%4d] loss: %.4f, lr: %.2e" \
+                                % (args.session, epoch, step, iters_per_epoch, loss_temp, lr))
+        print("\t\t\tfg/bg=(%d/%d), time cost: %f" % (fg_cnt, bg_cnt, end-start))
+        print("\t\t\trpn_cls: %.4f, rpn_box: %.4f, rcnn_cls: %.4f, rcnn_box %.4f" \
+                      % (loss_rpn_cls, loss_rpn_box, loss_rcnn_cls, loss_rcnn_box))
+        #-----------------
+        #print("loss", loss_temp)
+        #pdb.set_trace()
+        #----------------------
+        if args.use_tfboard:
+          info = {
+            'loss': loss_temp,
+            'loss_rpn_cls': loss_rpn_cls,
+            'loss_rpn_box': loss_rpn_box,
+            'loss_rcnn_cls': loss_rcnn_cls,
+            'loss_rcnn_box': loss_rcnn_box
+          }
+          logger.add_scalars("logs_s_{}/losses".format(args.session), info, (epoch - 1) * iters_per_epoch + step)
+
+        loss_temp = 0
+        start = time.time()
+    for step in range(val_iters):
+      data = next(val_data_iter)
+
+      with torch.no_grad():
+              im_data = torch.unsqueeze(data[0][0], 0).cuda()
+              im_info = data[1][0].cuda()
+              gt_boxes = torch.unsqueeze(data[2][0], 0).cuda()
+              num_boxes = data[3][0].cuda()
+      fasterRCNN.zero_grad()
+      rois, cls_prob, bbox_pred, \
+      rpn_loss_cls, rpn_loss_box, \
+      RCNN_loss_cls, RCNN_loss_bbox, \
+      rois_label = fasterRCNN(im_data, im_info, gt_boxes, num_boxes)
+
+      loss = rpn_loss_cls.mean() + rpn_loss_box.mean() \
+          + RCNN_loss_cls.mean() + RCNN_loss_bbox.mean()
+      loss_temp += loss.item()
+
+      if step % args.disp_interval == 0:
+        end = time.time()
+        if step > 0:
+          loss_temp /= (args.disp_interval + 1)
+
+        if args.mGPUs:
+          loss_rpn_cls = rpn_loss_cls.mean().item()
+          loss_rpn_box = rpn_loss_box.mean().item()
+          loss_rcnn_cls = RCNN_loss_cls.mean().item()
+          loss_rcnn_box = RCNN_loss_bbox.mean().item()
+          fg_cnt = torch.sum(rois_label.data.ne(0))
+          bg_cnt = rois_label.data.numel() - fg_cnt
+        else:
+          loss_rpn_cls = rpn_loss_cls.item()
+          loss_rpn_box = rpn_loss_box.item()
+          loss_rcnn_cls = RCNN_loss_cls.item()
+          loss_rcnn_box = RCNN_loss_bbox.item()
+          fg_cnt = torch.sum(rois_label.data.ne(0))
+          bg_cnt = rois_label.data.numel() - fg_cnt
+
+        print("Validation [session %d][epoch %2d][iter %4d/%4d] loss: %.4f, lr: %.2e" \
                                 % (args.session, epoch, step, iters_per_epoch, loss_temp, lr))
         print("\t\t\tfg/bg=(%d/%d), time cost: %f" % (fg_cnt, bg_cnt, end-start))
         print("\t\t\trpn_cls: %.4f, rpn_box: %.4f, rcnn_cls: %.4f, rcnn_box %.4f" \
@@ -367,8 +446,6 @@ if __name__ == '__main__':
 
         loss_temp = 0
         start = time.time()
-
-    
     save_name = os.path.join(output_dir, 'faster_rcnn_{}_{}_{}.pth'.format(args.session, epoch, step))
     save_checkpoint({
       'session': args.session,

@@ -89,7 +89,7 @@ def bbox_transform_inv(boxes, deltas, batch_size):
     pred_ctr_y = dy * heights.unsqueeze(2) + ctr_y.unsqueeze(2)
     pred_w = torch.exp(dw) * widths.unsqueeze(2)
     pred_h = torch.exp(dh) * heights.unsqueeze(2)
-
+    
     pred_boxes = deltas.clone()
     # x1
     pred_boxes[:, :, 0::4] = pred_ctr_x - 0.5 * pred_w
@@ -123,13 +123,11 @@ def clip_boxes_batch(boxes, im_shape, batch_size):
     return boxes
 
 def clip_boxes(boxes, im_shape, batch_size):
-
     for i in range(batch_size):
         boxes[i,:,0::4].clamp_(0, im_shape[i, 1]-1)
         boxes[i,:,1::4].clamp_(0, im_shape[i, 0]-1)
         boxes[i,:,2::4].clamp_(0, im_shape[i, 1]-1)
         boxes[i,:,3::4].clamp_(0, im_shape[i, 0]-1)
-
     return boxes
 
 
@@ -245,8 +243,7 @@ def bbox_overlaps_batch(anchors, gt_boxes):
             torch.max(boxes[:,:,:,1], query_boxes[:,:,:,1]) + 1)
         ih[ih < 0] = 0
         ua = anchors_area + gt_boxes_area - (iw * ih)
-        
-        # Intersection (iw * ih) divided by Union (ua)
+
         overlaps = iw * ih / ua
 
         # mask the overlap here.

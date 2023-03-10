@@ -19,7 +19,7 @@ cfg = __C
 __C.TRAIN = edict()
 
 # Initial learning rate
-__C.TRAIN.LEARNING_RATE = 0.001
+__C.TRAIN.LEARNING_RATE = 0.00000001
 
 # Momentum
 __C.TRAIN.MOMENTUM = 0.9
@@ -60,10 +60,10 @@ __C.TRAIN.SUMMARY_INTERVAL = 180
 
 # Scale to use during training (can list multiple scales)
 # The scale is the pixel size of an image's shortest side
-__C.TRAIN.SCALES = (600,)
+__C.TRAIN.SCALES = (720,)
 
 # Max pixel size of the longest side of a scaled input image
-__C.TRAIN.MAX_SIZE = 1000
+__C.TRAIN.MAX_SIZE = 1280
 
 # Trim size for input images to create minibatch
 __C.TRAIN.TRIM_HEIGHT = 600
@@ -165,10 +165,10 @@ __C.TEST = edict()
 
 # Scale to use during testing (can NOT list multiple scales)
 # The scale is the pixel size of an image's shortest side
-__C.TEST.SCALES = (600,)
+__C.TEST.SCALES = (720,)
 
 # Max pixel size of the longest side of a scaled input image
-__C.TEST.MAX_SIZE = 1000
+__C.TEST.MAX_SIZE = 1280
 
 # Overlap threshold used for non-maximum suppression (suppress boxes with
 # IoU >= this threshold)
@@ -278,9 +278,9 @@ __C.EXP_DIR = 'default'
 __C.USE_GPU_NMS = True
 
 # Default GPU device id
-__C.GPU_ID = 0
+__C.GPU_ID = 1
 
-__C.POOLING_MODE = 'crop'
+__C.POOLING_MODE = 'align'
 
 # Size of the pooled region after RoI pooling
 __C.POOLING_SIZE = 7
@@ -371,7 +371,7 @@ def cfg_from_file(filename):
   """Load a config file and merge it into the default options."""
   import yaml
   with open(filename, 'r') as f:
-    yaml_cfg = edict(yaml.load(f))
+    yaml_cfg = edict(yaml.safe_load(f))
 
   _merge_a_into_b(yaml_cfg, __C)
 
